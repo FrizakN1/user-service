@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package user;
+option go_package = "./userpb";
+
+service UserService {
+  rpc GetUsers(Empty) returns (GetUsersResponse);
+  rpc GetUser(UserID) returns (GetUserResponse);
+}
+
+message Empty {}
+
+message Role {
+  int32 id = 1;
+  string key = 2;
+  string value = 3;
+}
+
+message User {
+  int32 id = 1;
+  Role role = 2;
+  string login = 3;
+  string name = 4;
+  bool is_active = 5;
+  int64 created_at = 6;
+  int64 updated_at = 7;
+}
+
+message GetUsersResponse {
+  repeated User users = 1;
+}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+message UserID {
+  uint32 id = 1;
+}

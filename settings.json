@@ -1,0 +1,11 @@
+{
+  "Network": "tcp",
+  "Port": "50051",
+  "DbHost": "localhost",
+  "DbPort": "5432",
+  "DbUser": "postgres",
+  "DbPass": "",
+  "DbName": "user-service",
+  "SuperAdminPassword": "superadmin",
+  "SecretKey": "some-secret-key"
+}
