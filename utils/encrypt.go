@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"os"
 	"time"
 )
 
@@ -15,13 +16,12 @@ type Hasher interface {
 	GenerateHash(value string) (string, error)
 }
 
-type DefaultHasher struct {
-	SecretKey string
-}
+type DefaultHasher struct{}
 
 func (e *DefaultHasher) Encrypt(value string) (string, error) {
 	hash := sha256.New()
-	_, err := hash.Write([]byte(value + e.SecretKey))
+
+	_, err := hash.Write([]byte(value + os.Getenv("SECRET_KEY")))
 	if err != nil {
 		return "", err
 	}
@@ -52,7 +52,7 @@ func (e *DefaultHasher) GenerateHash(value string) (string, error) {
 	}
 
 	hash := sha256.New()
-	_, err = hash.Write([]byte(time.Now().String() + str + value + e.SecretKey))
+	_, err = hash.Write([]byte(time.Now().String() + str + value + os.Getenv("SECRET_KEY")))
 	if err != nil {
 		return "", err
 	}

@@ -20,7 +20,7 @@ func prepareRole() []string {
 		errorsList = append(errorsList, err.Error())
 	}
 
-	if err := prepareQuery("GET_ROLE", `SELECT id, value FROM "Role" WHERE key = $1`); err != nil {
+	if err := prepareQuery("GET_ROLE", `SELECT id, value FROM "Role" WHERE id = $1`); err != nil {
 		errorsList = append(errorsList, err.Error())
 	}
 
@@ -35,7 +35,7 @@ func (r *DefaultRoleRepository) GetRole(role *models.Role) error {
 		return err
 	}
 
-	if err := stmt.QueryRow(role.Key).Scan(&role.ID, &role.Value); err != nil {
+	if err := stmt.QueryRow(role.ID).Scan(&role.Key, &role.Value); err != nil {
 		utils.Logger.Println(err)
 		return err
 	}

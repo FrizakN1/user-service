@@ -9,7 +9,7 @@ import (
 )
 
 type SessionRepository interface {
-	DeleteSession(s *models.Session) error
+	DeleteSession(hash string) error
 	GetSession(hash string) *models.Session
 	CreateSession(user models.User) (string, error)
 	LoadSession(m map[string]models.Session) error
@@ -55,18 +55,18 @@ func prepareSession() []string {
 	return errorsList
 }
 
-func (r *DefaultSessionRepository) DeleteSession(s *models.Session) error {
+func (r *DefaultSessionRepository) DeleteSession(hash string) error {
 	stmt, ok := query["DELETE_SESSION"]
 	if !ok {
 		return errors.New("запрос DELETE_SESSION не подготовлен")
 	}
 
-	_, e := stmt.Exec(s.Hash)
+	_, e := stmt.Exec(hash)
 	if e != nil {
 		return e
 	}
 
-	delete(sessionMap, s.Hash)
+	delete(sessionMap, hash)
 
 	return nil
 }
@@ -169,11 +169,17 @@ func (r *DefaultSessionRepository) DeleteUserSessions(userID int) error {
 			return e
 		}
 
-		if e = r.DeleteSession(&session); e != nil {
+		if e = r.DeleteSession(session.Hash); e != nil {
 			utils.Logger.Println(e)
 			return e
 		}
 	}
 
 	return nil
+}
+
+func NewSessionRepository() SessionRepository {
+	return &DefaultSessionRepository{
+		Hasher: &utils.DefaultHasher{},
+	}
 }

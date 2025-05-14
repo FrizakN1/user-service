@@ -5,21 +5,21 @@ import (
 	"fmt"
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
-	"user-service/settings"
+	"os"
 	"user-service/utils"
 )
 
 var Link *sql.DB
 var query map[string]*sql.Stmt
 
-func Connection(config *settings.Setting) error {
+func Connection() error {
 	var err error
 	Link, err = sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		config.DbHost,
-		config.DbPort,
-		config.DbUser,
-		config.DbPass,
-		config.DbName))
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_PORT"),
+		os.Getenv("DB_USER"),
+		os.Getenv("DB_PASS"),
+		os.Getenv("DB_NAME")))
 	if err != nil {
 		utils.Logger.Println(err)
 		return err

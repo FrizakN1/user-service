@@ -2,34 +2,38 @@ package main
 
 import (
 	"fmt"
+	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
 	"log"
 	"net"
+	"os"
 	"user-service/database"
 	"user-service/handlers"
 	"user-service/proto/userpb"
-	"user-service/settings"
 	"user-service/utils"
 )
 
 func main() {
 	utils.InitLogger()
 
-	config := settings.Load("settings.json")
+	if err := godotenv.Load(); err != nil {
+		log.Fatalln(err)
+		return
+	}
 
-	if err := database.Connection(config); err != nil {
+	if err := database.Connection(); err != nil {
 		log.Fatalln(err)
 		return
 	}
 
 	userRepo := database.NewUserRepository()
 
-	if err := userRepo.CheckAdmin(config); err != nil {
+	if err := userRepo.CheckAdmin(); err != nil {
 		log.Fatalln(err)
 		return
 	}
 
-	lis, err := net.Listen(config.Network, fmt.Sprintf(":%s", config.Port))
+	lis, err := net.Listen(os.Getenv("APP_NETWORK"), fmt.Sprintf(":%s", os.Getenv("APP_PORT")))
 	if err != nil {
 		log.Fatalln(err)
 	}

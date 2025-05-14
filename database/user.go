@@ -3,9 +3,9 @@ package database
 import (
 	"database/sql"
 	"errors"
+	"os"
 	"time"
 	"user-service/models"
-	"user-service/settings"
 	"user-service/utils"
 )
 
@@ -15,11 +15,11 @@ type UserRepository interface {
 	GetUsers() ([]models.User, error)
 	EditUser(user *models.User) error
 	CreateUser(user *models.User) error
-	GetAuthorize(user *models.User) error
+	Login(user *models.User) error
 	ChangeUserPassword(user *models.User) error
-	CreateAdmin(config *settings.Setting) error
+	CreateAdmin() error
 	ValidateUser(user models.User, action string) bool
-	CheckAdmin(config *settings.Setting) error
+	CheckAdmin() error
 }
 
 type DefaultUserRepository struct {
@@ -231,7 +231,7 @@ func (r *DefaultUserRepository) CreateUser(user *models.User) error {
 	return nil
 }
 
-func (r *DefaultUserRepository) GetAuthorize(user *models.User) error {
+func (r *DefaultUserRepository) Login(user *models.User) error {
 	stmt, ok := query["GET_AUTHORIZED_USER"]
 	if !ok {
 		err := errors.New("запрос GET_AUTHORIZED_USER не подготовлен")
@@ -264,7 +264,7 @@ func (r *DefaultUserRepository) GetAuthorize(user *models.User) error {
 	return nil
 }
 
-func (r *DefaultUserRepository) CheckAdmin(config *settings.Setting) error {
+func (r *DefaultUserRepository) CheckAdmin() error {
 	stmt, ok := query["GET_SUPER_ADMIN"]
 	if !ok {
 		err := errors.New("запрос GET_SUPER_ADMIN не подготовлен")
@@ -277,7 +277,7 @@ func (r *DefaultUserRepository) CheckAdmin(config *settings.Setting) error {
 	e := stmt.QueryRow().Scan(&admin.ID, &admin.Password)
 	if e != nil {
 		if errors.Is(e, sql.ErrNoRows) {
-			if e = r.CreateAdmin(config); e != nil {
+			if e = r.CreateAdmin(); e != nil {
 				utils.Logger.Println(e)
 				return e
 			}
@@ -287,14 +287,14 @@ func (r *DefaultUserRepository) CheckAdmin(config *settings.Setting) error {
 		}
 	}
 
-	encryptPass, e := r.Hasher.Encrypt(config.SuperAdminPassword)
+	encryptPass, e := r.Hasher.Encrypt(os.Getenv("SUPER_ADMIN_PASSWORD"))
 	if e != nil {
 		utils.Logger.Println(e)
 		return e
 	}
 
 	if encryptPass != admin.Password {
-		admin.Password = config.SuperAdminPassword
+		admin.Password = os.Getenv("SUPER_ADMIN_PASSWORD")
 
 		if e = r.ChangeUserPassword(&admin); e != nil {
 			utils.Logger.Println(e)
@@ -332,10 +332,10 @@ func (r *DefaultUserRepository) ChangeUserPassword(user *models.User) error {
 	return nil
 }
 
-func (r *DefaultUserRepository) CreateAdmin(config *settings.Setting) error {
+func (r *DefaultUserRepository) CreateAdmin() error {
 	var admin models.User
 
-	encryptPass, e := r.Hasher.Encrypt(config.SuperAdminPassword)
+	encryptPass, e := r.Hasher.Encrypt(os.Getenv("SUPER_ADMIN_PASSWORD"))
 	if e != nil {
 		utils.Logger.Println(e)
 		return e
