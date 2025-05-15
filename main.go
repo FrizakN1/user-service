@@ -26,9 +26,9 @@ func main() {
 		return
 	}
 
-	userRepo := database.NewUserRepository()
+	userService := NewUserServiceServer()
 
-	if err := userRepo.CheckAdmin(); err != nil {
+	if err := userService.UserRepo.CheckAdmin(); err != nil {
 		log.Fatalln(err)
 		return
 	}
@@ -39,7 +39,15 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	userpb.RegisterUserServiceServer(grpcServer, &handlers.UserServiceServer{})
+	userpb.RegisterUserServiceServer(grpcServer, userService)
 	log.Println("User-service started on :50051")
 	grpcServer.Serve(lis)
+}
+
+func NewUserServiceServer() *handlers.UserServiceServer {
+	return &handlers.UserServiceServer{
+		UserRepo:    database.NewUserRepository(),
+		RoleRepo:    &database.DefaultRoleRepository{},
+		SessionRepo: database.NewSessionRepository(),
+	}
 }

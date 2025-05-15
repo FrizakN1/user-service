@@ -11,12 +11,26 @@ service UserService {
   rpc GetRoles(Empty) returns (GetRolesResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc ChangeUserStatus(ChangeUserStatusRequest) returns (ChangeUserStatusResponse);
-  rpc GetSession(GetSessionRequest) returns (Session);
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
   rpc Logout(LogoutRequest) returns (Empty);
+  rpc GetUsersByIds(GetUsersByIdsRequest) returns (GetUsersByIdsResponse);
+}
+
+message GetUsersByIdsResponse {
+  repeated User users = 1;
+}
+
+message GetUsersByIdsRequest {
+  repeated int32 ids = 1;
 }
 
 message LogoutRequest {
   string hash = 1;
+}
+
+message GetSessionResponse {
+  Session session = 1;
+  bool exist = 2;
 }
 
 message GetSessionRequest {

@@ -13,63 +13,21 @@ import (
 
 type UserServiceServer struct {
 	userpb.UnimplementedUserServiceServer
-	userRepo    *database.DefaultUserRepository
-	roleRepo    *database.DefaultRoleRepository
-	sessionRepo *database.DefaultSessionRepository
-}
-
-func (s *UserServiceServer) Logout(ctx context.Context, req *userpb.LogoutRequest) (*userpb.Empty, error) {
-	if err := s.sessionRepo.DeleteSession(req.Hash); err != nil {
-		utils.Logger.Println(err)
-		return nil, err
-	}
-
-	return &userpb.Empty{}, nil
-}
-
-func (s *UserServiceServer) GetSession(ctx context.Context, req *userpb.GetSessionRequest) (*userpb.Session, error) {
-	session := s.sessionRepo.GetSession(req.Hash)
-	if session == nil {
-		return nil, errors.New("session not found")
-	}
-
-	grpcSession := &userpb.Session{
-		Hash: session.Hash,
-		User: &userpb.User{
-			Id: int32(session.User.ID),
-			Role: &userpb.Role{
-				Id:    int32(session.User.Role.ID),
-				Key:   session.User.Role.Key,
-				Value: session.User.Role.Value,
-			},
-			Login:     session.User.Login,
-			Name:      session.User.Name,
-			IsActive:  session.User.IsActive,
-			CreatedAt: session.User.CreatedAt,
-			UpdatedAt: func() int64 {
-				if session.User.UpdatedAt.Valid {
-					return session.User.UpdatedAt.Int64
-				}
-
-				return 0
-			}(),
-		},
-		CreatedAt: session.CreatedAt,
-	}
-
-	return grpcSession, nil
+	UserRepo    database.UserRepository
+	RoleRepo    database.RoleRepository
+	SessionRepo database.SessionRepository
 }
 
 func (s *UserServiceServer) ChangeUserStatus(ctx context.Context, req *userpb.ChangeUserStatusRequest) (*userpb.ChangeUserStatusResponse, error) {
 	user := &models.User{ID: int(req.Id)}
 
-	if err := s.userRepo.ChangeStatus(user); err != nil {
+	if err := s.UserRepo.ChangeStatus(user); err != nil {
 		utils.Logger.Println(err)
 		return nil, err
 	}
 
 	if !user.IsActive {
-		if err := s.sessionRepo.DeleteUserSessions(user.ID); err != nil {
+		if err := s.SessionRepo.DeleteUserSessions(user.ID); err != nil {
 			utils.Logger.Println(err)
 			return nil, err
 		}
@@ -84,22 +42,24 @@ func (s *UserServiceServer) Login(ctx context.Context, req *userpb.LoginRequest)
 		Password: req.Password,
 	}
 
-	if err := s.userRepo.Login(user); err != nil {
+	if err := s.UserRepo.Login(user); err != nil {
+		utils.Logger.Println(err)
 		return nil, err
 	}
 
 	if user.ID <= 0 {
-		return &userpb.LoginResponse{Failure: "Неверный логин/пароль"}, errors.New("user not found")
+		return &userpb.LoginResponse{Failure: "Неверный логин/пароль"}, nil
 	}
 
 	if !user.IsActive {
-		return &userpb.LoginResponse{Failure: "Этот аккаунт заблокирован"}, errors.New("user is not active")
+		return &userpb.LoginResponse{Failure: "Этот аккаунт заблокирован"}, nil
 	}
 
 	user.Password = ""
 
-	hash, err := s.sessionRepo.CreateSession(*user)
+	hash, err := s.SessionRepo.CreateSession(*user)
 	if err != nil {
+		utils.Logger.Println(err)
 		return nil, err
 	}
 
@@ -119,17 +79,17 @@ func (s *UserServiceServer) EditUser(ctx context.Context, req *userpb.EditUserRe
 		},
 	}
 
-	if !s.userRepo.ValidateUser(*user, "edit") {
+	if !s.UserRepo.ValidateUser(*user, "edit") {
 		return nil, errors.New("user is not valid")
 	}
 
-	if err := s.userRepo.EditUser(user); err != nil {
+	if err := s.UserRepo.EditUser(user); err != nil {
 		utils.Logger.Println(err)
 		return nil, err
 	}
 
 	if user.Password != "" {
-		if err := s.userRepo.ChangeUserPassword(user); err != nil {
+		if err := s.UserRepo.ChangeUserPassword(user); err != nil {
 			utils.Logger.Println(err)
 			return nil, err
 		}
@@ -137,7 +97,7 @@ func (s *UserServiceServer) EditUser(ctx context.Context, req *userpb.EditUserRe
 		user.Password = ""
 	}
 
-	if err := s.sessionRepo.DeleteUserSessions(user.ID); err != nil {
+	if err := s.SessionRepo.DeleteUserSessions(user.ID); err != nil {
 		utils.Logger.Println(err)
 		return nil, err
 	}
@@ -154,11 +114,12 @@ func (s *UserServiceServer) CreateUser(ctx context.Context, req *userpb.CreateUs
 		CreatedAt: time.Now().Unix(),
 	}
 
-	if !s.userRepo.ValidateUser(*user, "create") {
+	if !s.UserRepo.ValidateUser(*user, "create") {
 		return nil, errors.New("user is not valid")
 	}
 
-	if err := s.userRepo.CreateUser(user); err != nil {
+	if err := s.UserRepo.CreateUser(user); err != nil {
+		utils.Logger.Println(err)
 		return nil, err
 	}
 
@@ -166,8 +127,9 @@ func (s *UserServiceServer) CreateUser(ctx context.Context, req *userpb.CreateUs
 }
 
 func (s *UserServiceServer) GetUsers(ctx context.Context, req *userpb.Empty) (*userpb.GetUsersResponse, error) {
-	users, err := s.userRepo.GetUsers()
+	users, err := s.UserRepo.GetUsers()
 	if err != nil {
+		utils.Logger.Println(err)
 		return nil, err
 	}
 
@@ -195,4 +157,37 @@ func (s *UserServiceServer) GetUsers(ctx context.Context, req *userpb.Empty) (*u
 	}
 
 	return &userpb.GetUsersResponse{Users: grpcUsers}, nil
+}
+
+func (s *UserServiceServer) GetUsersByIds(ctx context.Context, req *userpb.GetUsersByIdsRequest) (*userpb.GetUsersByIdsResponse, error) {
+	users, err := s.UserRepo.GetUsersByIds(req.Ids)
+	if err != nil {
+		utils.Logger.Println(err)
+		return nil, err
+	}
+
+	var grpcUsers []*userpb.User
+	for _, u := range users {
+		grpcUser := &userpb.User{
+			Id:        int32(u.ID),
+			Login:     u.Login,
+			Name:      u.Name,
+			IsActive:  u.IsActive,
+			CreatedAt: u.CreatedAt,
+			UpdatedAt: func() int64 {
+				if u.UpdatedAt.Valid {
+					return u.UpdatedAt.Int64
+				}
+				return 0
+			}(),
+			Role: &userpb.Role{
+				Id:    int32(u.Role.ID),
+				Key:   u.Role.Key,
+				Value: u.Role.Value,
+			},
+		}
+		grpcUsers = append(grpcUsers, grpcUser)
+	}
+
+	return &userpb.GetUsersByIdsResponse{Users: grpcUsers}, nil
 }

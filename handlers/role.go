@@ -6,7 +6,7 @@ import (
 )
 
 func (s *UserServiceServer) GetRoles(ctx context.Context, req *userpb.Empty) (*userpb.GetRolesResponse, error) {
-	roles, err := s.roleRepo.GetRoles()
+	roles, err := s.RoleRepo.GetRoles()
 	if err != nil {
 		return nil, err
 	}

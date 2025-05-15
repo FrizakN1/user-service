@@ -25,6 +25,8 @@ var sessionMap map[string]models.Session
 func prepareSession() []string {
 	errorsList := make([]string, 0)
 
+	sessionMap = make(map[string]models.Session)
+
 	if err := prepareQuery("GET_SESSIONS", `
 		SELECT s.*, u.role_id, u.login, u.name, u.is_active, u.created_at, u.updated_at, r.key, r.value
 		FROM "Session" AS s

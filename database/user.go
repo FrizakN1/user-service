@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"errors"
+	"github.com/lib/pq"
 	"os"
 	"time"
 	"user-service/models"
@@ -20,6 +21,7 @@ type UserRepository interface {
 	CreateAdmin() error
 	ValidateUser(user models.User, action string) bool
 	CheckAdmin() error
+	GetUsersByIds(ids []int32) ([]models.User, error)
 }
 
 type DefaultUserRepository struct {
@@ -35,6 +37,16 @@ func prepareUsers() []string {
 		SELECT u.id, u.role_id, u.login, u.name, u.is_active, u.created_at, u.updated_at, r.key, r.value
 		FROM "User" AS u
 		JOIN "Role" AS r ON r.id = u.role_id
+		ORDER BY u.id
+	`); err != nil {
+		errorsList = append(errorsList, err.Error())
+	}
+
+	if err := prepareQuery("GET_USERS_BY_IDS", `
+		SELECT u.id, u.role_id, u.login, u.name, u.is_active, u.created_at, u.updated_at, r.key, r.value
+		FROM "User" AS u
+		JOIN "Role" AS r ON r.id = u.role_id
+		WHERE u.id = ANY($1)
 		ORDER BY u.id
 	`); err != nil {
 		errorsList = append(errorsList, err.Error())
@@ -93,6 +105,46 @@ func prepareUsers() []string {
 	}
 
 	return errorsList
+}
+
+func (r *DefaultUserRepository) GetUsersByIds(ids []int32) ([]models.User, error) {
+	stmt, ok := query["GET_USERS_BY_IDS"]
+	if !ok {
+		err := errors.New("запрос GET_USERS_BY_IDS не подготовлен")
+		utils.Logger.Println(err)
+		return nil, err
+	}
+
+	rows, err := stmt.Query(pq.Array(ids))
+	if err != nil {
+		utils.Logger.Println(err)
+		return nil, err
+	}
+
+	var users []models.User
+
+	for rows.Next() {
+		var user models.User
+
+		if err = rows.Scan(
+			&user.ID,
+			&user.Role.ID,
+			&user.Login,
+			&user.Name,
+			&user.IsActive,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+			&user.Role.Key,
+			&user.Role.Value,
+		); err != nil {
+			utils.Logger.Println(err)
+			return nil, err
+		}
+
+		users = append(users, user)
+	}
+
+	return users, nil
 }
 
 func (r *DefaultUserRepository) ChangeStatus(user *models.User) error {
