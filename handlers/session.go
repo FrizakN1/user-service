@@ -7,7 +7,7 @@ import (
 )
 
 func (s *UserServiceServer) Logout(ctx context.Context, req *userpb.LogoutRequest) (*userpb.Empty, error) {
-	if err := s.SessionRepo.DeleteSession(req.Hash); err != nil {
+	if err := s.Logic.SessionRepo.DeleteSession(req.Hash); err != nil {
 		utils.Logger.Println(err)
 		return nil, err
 	}
@@ -16,7 +16,7 @@ func (s *UserServiceServer) Logout(ctx context.Context, req *userpb.LogoutReques
 }
 
 func (s *UserServiceServer) GetSession(ctx context.Context, req *userpb.GetSessionRequest) (*userpb.GetSessionResponse, error) {
-	session := s.SessionRepo.GetSession(req.Hash)
+	session := s.Logic.SessionRepo.GetSession(req.Hash)
 	if session == nil {
 		return &userpb.GetSessionResponse{Session: &userpb.Session{}, Exist: false}, nil
 	}

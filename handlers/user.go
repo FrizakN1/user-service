@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
 	"time"
 	"user-service/database"
 	"user-service/models"
@@ -13,21 +14,132 @@ import (
 
 type UserServiceServer struct {
 	userpb.UnimplementedUserServiceServer
-	UserRepo    database.UserRepository
-	RoleRepo    database.RoleRepository
-	SessionRepo database.SessionRepository
+	Logic *UserServiceLogic
 }
+
+type UserServiceLogic struct {
+	UserRepo    database.UserRepository
+	SessionRepo database.SessionRepository
+	RoleRepo    database.RoleRepository
+	Hasher      utils.Hasher
+}
+
+func (l *UserServiceLogic) ValidateUser(user models.User, action string) bool {
+	if len(user.Name) == 0 || len(user.Login) == 0 {
+		return false
+	}
+
+	roles, err := l.RoleRepo.GetRoles()
+	if err != nil {
+		utils.Logger.Println(err)
+		return false
+	}
+
+	validRole := false
+	for _, role := range roles {
+		if role.ID == user.Role.ID {
+			validRole = true
+			break
+		}
+	}
+
+	if !validRole {
+		return false
+	}
+
+	if action == "create" {
+		if len(user.Password) < 6 {
+			return false
+		}
+	} else if len(user.Password) != 0 {
+		if len(user.Password) < 6 {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (l *UserServiceLogic) CreateSuperAdmin() error {
+	var admin models.User
+
+	encryptPass, e := l.Hasher.Encrypt(os.Getenv("SUPER_ADMIN_PASSWORD"))
+	if e != nil {
+		utils.Logger.Println(e)
+		return e
+	}
+
+	role := models.Role{Key: "admin"}
+	if err := s.RoleRepo.GetRole(&role); err != nil {
+		utils.Logger.Println(err)
+		return err
+	}
+
+	admin = models.User{
+		Login:     "SuperAdmin",
+		Name:      "SuperAdmin",
+		Role:      role,
+		Password:  encryptPass,
+		CreatedAt: time.Now().Unix(),
+	}
+
+	if e = s.UserRepo.CreateUser(&admin); e != nil {
+		utils.Logger.Println(e)
+		return e
+	}
+	return nil
+}
+
+//func (l *UserServiceLogic) CheckAdmin() error {
+//	admin := &models.User{}
+//
+//	if err := s.UserRepo.GetSuperAdmin(admin); err != nil {
+//		utils.Logger.Println(err)
+//		return err
+//	}
+//
+//	if admin.ID == 0 {
+//		if err := s.UserRepo.CreateSuperAdmin(); err != nil {
+//			utils.Logger.Println(err)
+//			return err
+//		}
+//
+//		return nil
+//	}
+//
+//	encryptPass, err := s.Hasher.Encrypt(os.Getenv("SUPER_ADMIN_PASSWORD"))
+//	if err != nil {
+//		utils.Logger.Println(err)
+//		return err
+//	}
+//
+//	if encryptPass != admin.Password {
+//		admin.Password = os.Getenv("SUPER_ADMIN_PASSWORD")
+//
+//		if err = s.UserRepo.ChangeUserPassword(admin); err != nil {
+//			utils.Logger.Println(err)
+//			return err
+//		}
+//
+//		if err = s.SessionRepo.DeleteUserSessions(admin.ID); err != nil {
+//			utils.Logger.Println(err)
+//			return err
+//		}
+//	}
+//
+//	return nil
+//}
 
 func (s *UserServiceServer) ChangeUserStatus(ctx context.Context, req *userpb.ChangeUserStatusRequest) (*userpb.ChangeUserStatusResponse, error) {
 	user := &models.User{ID: int(req.Id)}
 
-	if err := s.UserRepo.ChangeStatus(user); err != nil {
+	if err := s.Logic.UserRepo.ChangeStatus(user); err != nil {
 		utils.Logger.Println(err)
 		return nil, err
 	}
 
 	if !user.IsActive {
-		if err := s.SessionRepo.DeleteUserSessions(user.ID); err != nil {
+		if err := s.Logic.SessionRepo.DeleteUserSessions(user.ID); err != nil {
 			utils.Logger.Println(err)
 			return nil, err
 		}
@@ -42,7 +154,7 @@ func (s *UserServiceServer) Login(ctx context.Context, req *userpb.LoginRequest)
 		Password: req.Password,
 	}
 
-	if err := s.UserRepo.Login(user); err != nil {
+	if err := s.Logic.UserRepo.Login(user); err != nil {
 		utils.Logger.Println(err)
 		return nil, err
 	}
@@ -57,7 +169,7 @@ func (s *UserServiceServer) Login(ctx context.Context, req *userpb.LoginRequest)
 
 	user.Password = ""
 
-	hash, err := s.SessionRepo.CreateSession(*user)
+	hash, err := s.Logic.SessionRepo.CreateSession(*user)
 	if err != nil {
 		utils.Logger.Println(err)
 		return nil, err
@@ -79,17 +191,17 @@ func (s *UserServiceServer) EditUser(ctx context.Context, req *userpb.EditUserRe
 		},
 	}
 
-	if !s.UserRepo.ValidateUser(*user, "edit") {
+	if !s.Logic.UserRepo.ValidateUser(*user, "edit") {
 		return nil, errors.New("user is not valid")
 	}
 
-	if err := s.UserRepo.EditUser(user); err != nil {
+	if err := s.Logic.UserRepo.EditUser(user); err != nil {
 		utils.Logger.Println(err)
 		return nil, err
 	}
 
 	if user.Password != "" {
-		if err := s.UserRepo.ChangeUserPassword(user); err != nil {
+		if err := s.Logic.UserRepo.ChangeUserPassword(user); err != nil {
 			utils.Logger.Println(err)
 			return nil, err
 		}
@@ -97,7 +209,7 @@ func (s *UserServiceServer) EditUser(ctx context.Context, req *userpb.EditUserRe
 		user.Password = ""
 	}
 
-	if err := s.SessionRepo.DeleteUserSessions(user.ID); err != nil {
+	if err := s.Logic.SessionRepo.DeleteUserSessions(user.ID); err != nil {
 		utils.Logger.Println(err)
 		return nil, err
 	}
@@ -114,11 +226,11 @@ func (s *UserServiceServer) CreateUser(ctx context.Context, req *userpb.CreateUs
 		CreatedAt: time.Now().Unix(),
 	}
 
-	if !s.UserRepo.ValidateUser(*user, "create") {
+	if !s.Logic.UserRepo.ValidateUser(*user, "create") {
 		return nil, errors.New("user is not valid")
 	}
 
-	if err := s.UserRepo.CreateUser(user); err != nil {
+	if err := s.Logic.UserRepo.CreateUser(user); err != nil {
 		utils.Logger.Println(err)
 		return nil, err
 	}
@@ -127,7 +239,7 @@ func (s *UserServiceServer) CreateUser(ctx context.Context, req *userpb.CreateUs
 }
 
 func (s *UserServiceServer) GetUsers(ctx context.Context, req *userpb.Empty) (*userpb.GetUsersResponse, error) {
-	users, err := s.UserRepo.GetUsers()
+	users, err := s.Logic.UserRepo.GetUsers()
 	if err != nil {
 		utils.Logger.Println(err)
 		return nil, err
@@ -160,7 +272,7 @@ func (s *UserServiceServer) GetUsers(ctx context.Context, req *userpb.Empty) (*u
 }
 
 func (s *UserServiceServer) GetUsersByIds(ctx context.Context, req *userpb.GetUsersByIdsRequest) (*userpb.GetUsersByIdsResponse, error) {
-	users, err := s.UserRepo.GetUsersByIds(req.Ids)
+	users, err := s.Logic.UserRepo.GetUsersByIds(req.Ids)
 	if err != nil {
 		utils.Logger.Println(err)
 		return nil, err
@@ -190,4 +302,13 @@ func (s *UserServiceServer) GetUsersByIds(ctx context.Context, req *userpb.GetUs
 	}
 
 	return &userpb.GetUsersByIdsResponse{Users: grpcUsers}, nil
+}
+
+func NewUserServiceLogic() *UserServiceLogic {
+	return &UserServiceLogic{
+		UserRepo:    database.NewUserRepository(),
+		RoleRepo:    &database.DefaultRoleRepository{},
+		SessionRepo: database.NewSessionRepository(),
+		Hasher:      &utils.DefaultHasher{},
+	}
 }

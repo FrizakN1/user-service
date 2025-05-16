@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"github.com/lib/pq"
-	"os"
-	"time"
 	"user-service/models"
 	"user-service/utils"
 )
@@ -18,10 +16,8 @@ type UserRepository interface {
 	CreateUser(user *models.User) error
 	Login(user *models.User) error
 	ChangeUserPassword(user *models.User) error
-	CreateAdmin() error
-	ValidateUser(user models.User, action string) bool
-	CheckAdmin() error
 	GetUsersByIds(ids []int32) ([]models.User, error)
+	GetSuperAdmin(admin *models.User) error
 }
 
 type DefaultUserRepository struct {
@@ -316,52 +312,6 @@ func (r *DefaultUserRepository) Login(user *models.User) error {
 	return nil
 }
 
-func (r *DefaultUserRepository) CheckAdmin() error {
-	stmt, ok := query["GET_SUPER_ADMIN"]
-	if !ok {
-		err := errors.New("запрос GET_SUPER_ADMIN не подготовлен")
-		utils.Logger.Println(err)
-		return err
-	}
-
-	var admin models.User
-
-	e := stmt.QueryRow().Scan(&admin.ID, &admin.Password)
-	if e != nil {
-		if errors.Is(e, sql.ErrNoRows) {
-			if e = r.CreateAdmin(); e != nil {
-				utils.Logger.Println(e)
-				return e
-			}
-		} else {
-			utils.Logger.Println(e)
-			return e
-		}
-	}
-
-	encryptPass, e := r.Hasher.Encrypt(os.Getenv("SUPER_ADMIN_PASSWORD"))
-	if e != nil {
-		utils.Logger.Println(e)
-		return e
-	}
-
-	if encryptPass != admin.Password {
-		admin.Password = os.Getenv("SUPER_ADMIN_PASSWORD")
-
-		if e = r.ChangeUserPassword(&admin); e != nil {
-			utils.Logger.Println(e)
-			return e
-		}
-
-		if e = r.SessionRepo.DeleteUserSessions(admin.ID); e != nil {
-			utils.Logger.Println(e)
-			return e
-		}
-	}
-
-	return nil
-}
-
 func (r *DefaultUserRepository) ChangeUserPassword(user *models.User) error {
 	stmt, ok := query["CHANGE_USER_PASSWORD"]
 	if !ok {
@@ -384,70 +334,20 @@ func (r *DefaultUserRepository) ChangeUserPassword(user *models.User) error {
 	return nil
 }
 
-func (r *DefaultUserRepository) CreateAdmin() error {
-	var admin models.User
-
-	encryptPass, e := r.Hasher.Encrypt(os.Getenv("SUPER_ADMIN_PASSWORD"))
-	if e != nil {
-		utils.Logger.Println(e)
-		return e
-	}
-
-	role := models.Role{Key: "admin"}
-	if err := r.RoleRepo.GetRole(&role); err != nil {
+func (r *DefaultUserRepository) GetSuperAdmin(admin *models.User) error {
+	stmt, ok := query["GET_SUPER_ADMIN"]
+	if !ok {
+		err := errors.New("запрос GET_SUPER_ADMIN не подготовлен")
 		utils.Logger.Println(err)
 		return err
 	}
 
-	admin = models.User{
-		Login:     "SuperAdmin",
-		Name:      "SuperAdmin",
-		Role:      role,
-		Password:  encryptPass,
-		CreatedAt: time.Now().Unix(),
-	}
-
-	if e = r.CreateUser(&admin); e != nil {
-		utils.Logger.Println(e)
-		return e
-	}
-	return nil
-}
-
-func (r *DefaultUserRepository) ValidateUser(user models.User, action string) bool {
-	if len(user.Name) == 0 || len(user.Login) == 0 {
-		return false
-	}
-
-	roles, err := r.RoleRepo.GetRoles()
-	if err != nil {
+	if err := stmt.QueryRow().Scan(&admin.ID, &admin.Password); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		utils.Logger.Println(err)
-		return false
+		return err
 	}
 
-	validRole := false
-	for _, role := range roles {
-		if role.ID == user.Role.ID {
-			validRole = true
-			break
-		}
-	}
-
-	if !validRole {
-		return false
-	}
-
-	if action == "create" {
-		if len(user.Password) < 6 {
-			return false
-		}
-	} else if len(user.Password) != 0 {
-		if len(user.Password) < 6 {
-			return false
-		}
-	}
-
-	return true
+	return nil
 }
 
 func NewUserRepository() UserRepository {
