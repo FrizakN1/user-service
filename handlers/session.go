@@ -3,12 +3,11 @@ package handlers
 import (
 	"context"
 	"user-service/proto/userpb"
-	"user-service/utils"
 )
 
 func (s *UserServiceServer) Logout(ctx context.Context, req *userpb.LogoutRequest) (*userpb.Empty, error) {
 	if err := s.Logic.SessionRepo.DeleteSession(req.Hash); err != nil {
-		utils.Logger.Println(err)
+		s.Logger.Println(err)
 		return nil, err
 	}
 

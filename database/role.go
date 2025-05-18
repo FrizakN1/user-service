@@ -3,7 +3,6 @@ package database
 import (
 	"errors"
 	"user-service/models"
-	"user-service/utils"
 )
 
 type RoleRepository interface {
@@ -11,32 +10,23 @@ type RoleRepository interface {
 	GetRole(role *models.Role) error
 }
 
-type DefaultRoleRepository struct{}
+type DefaultRoleRepository struct {
+	Database Database
+}
 
-func prepareRole() []string {
-	errorsList := make([]string, 0)
-
-	if err := prepareQuery("GET_ROLES", `SELECT * FROM "Role" ORDER BY id`); err != nil {
-		errorsList = append(errorsList, err.Error())
+func NewRoleRepository(db Database) RoleRepository {
+	return &DefaultRoleRepository{
+		Database: db,
 	}
-
-	if err := prepareQuery("GET_ROLE", `SELECT id, key, value FROM "Role" WHERE id = $1 OR key = $2`); err != nil {
-		errorsList = append(errorsList, err.Error())
-	}
-
-	return errorsList
 }
 
 func (r *DefaultRoleRepository) GetRole(role *models.Role) error {
-	stmt, ok := query["GET_ROLE"]
+	stmt, ok := r.Database.GetQuery("GET_ROLE")
 	if !ok {
-		err := errors.New("запрос GET_ROLE не подготовлен")
-		utils.Logger.Println(err)
-		return err
+		return errors.New("запрос GET_ROLE не подготовлен")
 	}
 
 	if err := stmt.QueryRow(role.ID, role.Key).Scan(&role.ID, &role.Key, &role.Value); err != nil {
-		utils.Logger.Println(err)
 		return err
 	}
 
@@ -44,16 +34,13 @@ func (r *DefaultRoleRepository) GetRole(role *models.Role) error {
 }
 
 func (r *DefaultRoleRepository) GetRoles() ([]models.Role, error) {
-	stmt, ok := query["GET_ROLES"]
+	stmt, ok := r.Database.GetQuery("GET_ROLES")
 	if !ok {
-		err := errors.New("запрос GET_ROLES не подготовлен")
-		utils.Logger.Println(err)
-		return nil, err
+		return nil, errors.New("запрос GET_ROLES не подготовлен")
 	}
 
 	rows, err := stmt.Query()
 	if err != nil {
-		utils.Logger.Println(err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -68,7 +55,6 @@ func (r *DefaultRoleRepository) GetRoles() ([]models.Role, error) {
 			&role.Key,
 			&role.Value,
 		); err != nil {
-			utils.Logger.Println(err)
 			return nil, err
 		}
 

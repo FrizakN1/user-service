@@ -14,26 +14,33 @@ import (
 )
 
 func main() {
-	utils.InitLogger()
-
 	if err := godotenv.Load(); err != nil {
 		log.Fatalln(err)
 		return
 	}
 
-	if err := database.Connection(); err != nil {
+	logger := utils.InitLogger()
+
+	db, err := database.InitDatabase()
+	if err != nil {
 		log.Fatalln(err)
 		return
 	}
 
 	userService := &handlers.UserServiceServer{
-		Logic: handlers.NewUserServiceLogic(),
+		Logic:  handlers.NewUserServiceLogic(db, logger),
+		Logger: logger,
 	}
 
-	//if err := userService.Logic.CheckAdmin(); err != nil {
-	//	log.Fatalln(err)
-	//	return
-	//}
+	if err = userService.Logic.CheckAdmin(); err != nil {
+		log.Fatalln(err)
+		return
+	}
+
+	if err = userService.Logic.SessionRepo.LoadSession(); err != nil {
+		log.Fatalln(err)
+		return
+	}
 
 	lis, err := net.Listen(os.Getenv("APP_NETWORK"), fmt.Sprintf(":%s", os.Getenv("APP_PORT")))
 	if err != nil {

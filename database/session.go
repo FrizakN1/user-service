@@ -11,54 +11,26 @@ import (
 type SessionRepository interface {
 	DeleteSession(hash string) error
 	GetSession(hash string) *models.Session
-	CreateSession(user models.User) (string, error)
-	LoadSession(m map[string]models.Session) error
+	CreateSession(user *models.User) (string, error)
+	LoadSession() error
 	DeleteUserSessions(userID int) error
 }
 
 type DefaultSessionRepository struct {
-	Hasher utils.Hasher
+	Hasher     utils.Hasher
+	Database   Database
+	sessionMap map[string]models.Session
 }
 
-var sessionMap map[string]models.Session
-
-func prepareSession() []string {
-	errorsList := make([]string, 0)
-
-	sessionMap = make(map[string]models.Session)
-
-	if err := prepareQuery("GET_SESSIONS", `
-		SELECT s.*, u.role_id, u.login, u.name, u.is_active, u.created_at, u.updated_at, r.key, r.value
-		FROM "Session" AS s
-		JOIN "User" AS u ON u.id = s.user_id
-		JOIN "Role" AS r ON r.id = u.role_id
-	`); err != nil {
-		errorsList = append(errorsList, err.Error())
+func NewSessionRepository(db Database) SessionRepository {
+	return &DefaultSessionRepository{
+		Hasher:   &utils.DefaultHasher{},
+		Database: db,
 	}
-
-	if err := prepareQuery("CREATE_SESSION", `
-		INSERT INTO "Session" (hash, user_id, created_at) VALUES ($1, $2, $3)
-	`); err != nil {
-		errorsList = append(errorsList, err.Error())
-	}
-
-	if err := prepareQuery("DELETE_SESSION", `
-		DELETE FROM "Session" WHERE hash = $1
-	`); err != nil {
-		errorsList = append(errorsList, err.Error())
-	}
-
-	if err := prepareQuery("GET_USER_SESSIONS", `
-		SELECT hash FROM "Session" WHERE user_id = $1
-	`); err != nil {
-		errorsList = append(errorsList, err.Error())
-	}
-
-	return errorsList
 }
 
 func (r *DefaultSessionRepository) DeleteSession(hash string) error {
-	stmt, ok := query["DELETE_SESSION"]
+	stmt, ok := r.Database.GetQuery("DELETE_SESSION")
 	if !ok {
 		return errors.New("запрос DELETE_SESSION не подготовлен")
 	}
@@ -68,13 +40,13 @@ func (r *DefaultSessionRepository) DeleteSession(hash string) error {
 		return e
 	}
 
-	delete(sessionMap, hash)
+	delete(r.sessionMap, hash)
 
 	return nil
 }
 
 func (r *DefaultSessionRepository) GetSession(hash string) *models.Session {
-	session, ok := sessionMap[hash]
+	session, ok := r.sessionMap[hash]
 	if ok {
 		return &session
 	}
@@ -82,44 +54,40 @@ func (r *DefaultSessionRepository) GetSession(hash string) *models.Session {
 	return nil
 }
 
-func (r *DefaultSessionRepository) CreateSession(user models.User) (string, error) {
-	stmt, ok := query["CREATE_SESSION"]
+func (r *DefaultSessionRepository) CreateSession(user *models.User) (string, error) {
+	stmt, ok := r.Database.GetQuery("CREATE_SESSION")
 	if !ok {
-		err := errors.New("запрос CREATE_SESSION не подготовлен")
-		utils.Logger.Println(err)
-		return "", err
+		return "", errors.New("запрос CREATE_SESSION не подготовлен")
 	}
 
 	hash, err := r.Hasher.GenerateHash(fmt.Sprintf("%s-%d", user.Login, time.Now().Unix()))
 	if err != nil {
-		utils.Logger.Println(err)
 		return "", err
 	}
 
 	if _, err = stmt.Exec(hash, user.ID, time.Now().Unix()); err != nil {
-		utils.Logger.Println(err)
 		return "", err
 	}
 
-	sessionMap[hash] = models.Session{
+	r.sessionMap[hash] = models.Session{
 		Hash:      hash,
-		User:      user,
+		User:      *user,
 		CreatedAt: time.Now().Unix(),
 	}
 
 	return hash, nil
 }
 
-func (r *DefaultSessionRepository) LoadSession(m map[string]models.Session) error {
-	stmt, ok := query["GET_SESSIONS"]
+func (r *DefaultSessionRepository) LoadSession() error {
+	r.sessionMap = make(map[string]models.Session)
+
+	stmt, ok := r.Database.GetQuery("GET_SESSIONS")
 	if !ok {
-		err := errors.New("запрос GET_SESSIONS не подготовлен")
-		return err
+		return errors.New("запрос GET_SESSIONS не подготовлен")
 	}
 
 	rows, err := stmt.Query()
 	if err != nil {
-		utils.Logger.Println(err)
 		return err
 	}
 
@@ -141,47 +109,37 @@ func (r *DefaultSessionRepository) LoadSession(m map[string]models.Session) erro
 			&session.User.Role.Key,
 			&session.User.Role.Value,
 		); err != nil {
-			utils.Logger.Println(err)
 			return err
 		}
 
-		m[session.Hash] = session
+		r.sessionMap[session.Hash] = session
 	}
 
 	return nil
 }
 
 func (r *DefaultSessionRepository) DeleteUserSessions(userID int) error {
-	stmt, ok := query["GET_USER_SESSIONS"]
+	stmt, ok := r.Database.GetQuery("DELETE_USER_SESSIONS")
 	if !ok {
-		return errors.New("запрос GET_USER_SESSIONS не подготовлен")
+		return errors.New("запрос DELETE_USER_SESSIONS не подготовлен")
 	}
 
-	rows, e := stmt.Query(userID)
-	if e != nil {
-		return e
+	rows, err := stmt.Query(userID)
+	if err != nil {
+		return err
 	}
 
 	defer rows.Close()
 
 	for rows.Next() {
-		var session models.Session
-		e = rows.Scan(&session.Hash)
-		if e != nil {
-			return e
+		var hash string
+
+		if err = rows.Scan(&hash); err != nil {
+			return err
 		}
 
-		if e = r.DeleteSession(session.Hash); e != nil {
-			utils.Logger.Println(e)
-			return e
-		}
+		delete(r.sessionMap, hash)
 	}
 
 	return nil
-}
-
-func NewSessionRepository() SessionRepository {
-	return &DefaultSessionRepository{
-		Hasher: &utils.DefaultHasher{},
-	}
 }

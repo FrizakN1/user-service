@@ -8,6 +8,7 @@ import (
 func (s *UserServiceServer) GetRoles(ctx context.Context, req *userpb.Empty) (*userpb.GetRolesResponse, error) {
 	roles, err := s.Logic.RoleRepo.GetRoles()
 	if err != nil {
+		s.Logger.Println(err)
 		return nil, err
 	}
 
