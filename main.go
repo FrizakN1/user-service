@@ -9,6 +9,7 @@ import (
 	"os"
 	"user-service/database"
 	"user-service/handlers"
+	"user-service/interceptors"
 	"user-service/proto/userpb"
 	"user-service/utils"
 )
@@ -47,7 +48,12 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	grpcServer := grpc.NewServer()
+	interceptor := interceptors.AuthInterceptor(userService.Logic.SessionRepo)
+
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(interceptor),
+	)
+
 	userpb.RegisterUserServiceServer(grpcServer, userService)
 	log.Println("User-service started on :50051")
 	grpcServer.Serve(lis)
