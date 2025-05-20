@@ -31,13 +31,27 @@ type SuperAdminCreator interface {
 	CreateSuperAdmin() error
 }
 
+type DefaultSuperAdminCreator struct {
+	UserRepo database.UserRepository
+	RoleRepo database.RoleRepository
+	Logger   utils.Logger
+}
+
 func NewUserServiceLogic(db database.Database, logger utils.Logger) *UserServiceLogic {
+	userRepo := database.NewUserRepository(db)
+	roleRepo := database.NewRoleRepository(db)
+
 	return &UserServiceLogic{
-		UserRepo:    database.NewUserRepository(db),
-		RoleRepo:    database.NewRoleRepository(db),
+		UserRepo:    userRepo,
+		RoleRepo:    roleRepo,
 		SessionRepo: database.NewSessionRepository(db),
 		Hasher:      &utils.DefaultHasher{},
 		Logger:      logger,
+		AdminCreator: &DefaultSuperAdminCreator{
+			UserRepo: userRepo,
+			RoleRepo: roleRepo,
+			Logger:   logger,
+		},
 	}
 }
 
@@ -77,7 +91,7 @@ func (l *UserServiceLogic) ValidateUser(user models.User, action string) bool {
 	return true
 }
 
-func (l *UserServiceLogic) CreateSuperAdmin() error {
+func (l *DefaultSuperAdminCreator) CreateSuperAdmin() error {
 	var admin models.User
 
 	role := models.Role{Key: "admin"}

@@ -14,9 +14,12 @@ type Logger interface {
 func InitLogger() Logger {
 	logDir := "logs"
 
-	if err := os.Mkdir(logDir, os.ModePerm); err != nil {
-		fmt.Println("ошибка создания папки logs:", err)
-		return log.Default()
+	_, err := os.Stat(logDir)
+	if os.IsNotExist(err) {
+		if err = os.Mkdir(logDir, os.ModePerm); err != nil {
+			fmt.Println("ошибка создания папки logs:", err)
+			return log.Default()
+		}
 	}
 
 	currentDate := time.Now().String()[0:10]

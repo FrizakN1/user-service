@@ -15,8 +15,10 @@ FROM debian:unstable-slim
 WORKDIR /app
 
 COPY --from=builder /app/user-service .
-COPY --from=builder /app/logs .
-COPY --from=builder /app/migration .
+COPY --from=builder /app/logs ./logs
+COPY --from=builder /app/migrations ./migrations
+
+RUN touch .env
 
 EXPOSE 50031
 
