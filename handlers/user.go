@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"os"
 	"time"
 	"user-service/database"
@@ -150,6 +151,8 @@ func (l *UserServiceLogic) CheckAdmin() error {
 			l.Logger.Println(err)
 			return err
 		}
+
+		log.Println("SuperAdmin password is changed")
 	}
 
 	return nil
