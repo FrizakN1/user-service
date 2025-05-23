@@ -20,6 +20,6 @@ COPY --from=builder /app/migrations ./migrations
 
 RUN touch .env
 
-EXPOSE 50031
+EXPOSE 50051
 
 CMD ["./user-service"]
