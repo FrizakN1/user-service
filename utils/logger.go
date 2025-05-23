@@ -17,7 +17,7 @@ func InitLogger() Logger {
 	_, err := os.Stat(logDir)
 	if os.IsNotExist(err) {
 		if err = os.Mkdir(logDir, os.ModePerm); err != nil {
-			fmt.Println("ошибка создания папки logs:", err)
+			log.Fatalf("ошибка создания папки logs: %e\n", err)
 			return log.Default()
 		}
 	}
@@ -26,7 +26,7 @@ func InitLogger() Logger {
 
 	loggerFile, e := os.OpenFile(fmt.Sprintf("%s/%s.log", logDir, currentDate), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if e != nil {
-		fmt.Println(e)
+		log.Fatalln(e)
 		return log.Default()
 	}
 
