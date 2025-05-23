@@ -10,7 +10,6 @@ import (
 	"user-service/database"
 	"user-service/handlers"
 	"user-service/interceptors"
-	"user-service/kafka"
 	"user-service/proto/userpb"
 	"user-service/utils"
 )
@@ -48,8 +47,6 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-
-	kafka.InitKafkaLogger()
 
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
