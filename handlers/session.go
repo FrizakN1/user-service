@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"user-service/proto/userpb"
 )
 
@@ -17,7 +19,7 @@ func (s *UserServiceServer) Logout(ctx context.Context, req *userpb.LogoutReques
 func (s *UserServiceServer) GetSession(ctx context.Context, req *userpb.GetSessionRequest) (*userpb.GetSessionResponse, error) {
 	session := s.Logic.SessionRepo.GetSession(req.Hash)
 	if session == nil {
-		return &userpb.GetSessionResponse{Session: &userpb.Session{}, Exist: false}, nil
+		return &userpb.GetSessionResponse{Session: &userpb.Session{}, Exist: false}, status.Error(codes.Unauthenticated, "session not found")
 	}
 
 	grpcSession := &userpb.Session{
